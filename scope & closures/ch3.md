@@ -317,3 +317,233 @@
 	    console.log( bar );
 	}
 
+我们只在if语句的上下文中使用了`bar`变量，因此这看起来说明我们应该在if块中声明它。但是我们声明变量的地方和什么时候使用`var`是无关的，因为它们总是属于外部的作用域。这段代码实际上只是个“假”块级作用域，完全处于代码风格的原因，我们只能依靠自觉不去在另一处意料之外地使用`bar`。
+
+块级作用域是一个用来扩展之前所说的“最小权限原则”，和之前的在函数中隐藏信息相比，它在我们的代码块中隐藏了信息。
+
+再次考虑一下这个for循环的例子：
+
+	for (var i=0; i<10; i++) {
+	    console.log( i );
+	}
+	
+为什么要用只会（或者说只应该）在for循环中使用的变量`i`污染整个作用域呢？
+
+但更重要的是，开发人员可能倾向于自己检查是否意外地在原本意图之外（重新）使用了变量，它们希望在这种情况下被告知一个未知变量的错误。块级作用域（如果有的话），可以使i仅仅在for循环中可用，如果在函数的其他地方使用则会导致一个错误。这样有助于确保变量不被以令人困惑或难以维护的方式重用。
+
+但是，令人悲伤的事实就是，目前看来，JavaScript没有块级作用域的机制。
+
+## `with`
+
+我们在第2章学习了`with`。尽管这是一个让人讨厌的结构，但是它能够实现（一种）块级作用域，在`with`中由对象所创建的作用域只存在于with语句的生命周期内，而不存在于整个外部作用域中。
+
+## `try/catch`
+
+有一个非常鲜为人知的事实是，JavaScript在ES3中指定了在`try/catch`的`catch`分句中声明的变量是`catch`块的块级作用域。
+
+例如：
+
+	try {
+	    undefined(); // illegal operation to force an exception!
+	}
+	catch (err) {
+	    console.log( err ); // works!
+	}
+
+	console.log( err ); // ReferenceError: `err` not found
+
+可以看出，`err`只在`catch`分句中存在，当你在其他地方引用它时会抛出一个错误。
+
+
+**注：**尽管这种行为已经被标准指定并且几乎所有标准JS环境（可能之后老版本的IE除外）都成立，但许多代码检查工具仍然在抱怨当你在一个作用域中有有两个或更多`catch`分句而每个分句都声明了相同标识符的名称的场景。这种场景实际上并不是一种重定义，因为变量都安全地被包裹在块作用域中，但是代码检查工具似乎仍然在吵吵不休地抱怨这一种用法。
+
+为了避免这种不必要的警告，有些开发者会选择将他们的`catch`变量命名为`err1`，`err2`等等。而其他的开发者会简单地关掉对于重复变量名的检验。
+
+`catch`的块级作用域天然特性似乎只是一个没什么用的理论事实，但是你可以在附录B中看到它是多么的有用。
+
+## `let`
+
+到目前为止，我们已经知道JavaScript只对一些奇怪的小众行为上暴露块作用域功能。如果仅仅是这样的话，那么在许多年内块作用域对JavaScript开发者来说都没什么用。
+
+幸运的是，ES6改变了这一切，它带来了一个新的关键词`let`，它和`var`平起平坐成为第二种声明变量的方式。
+
+`let`关键词将变量声明附在它最近的块（一般是一个`{ .. }`对）的作用域中。换句话说，`let`隐式地为它声明的变量劫持了任何块的作用域。
+
+	var foo = true;
+
+	if (foo) {
+	    let bar = foo * 2;
+	    bar = something( bar );
+	    console.log( bar );
+	}
+
+	console.log( bar ); // ReferenceError
+	
+使用`let`来将一个变量附着在一个已经存在的块上是隐式完成的。如果你没有在编写代码的过程中密切地关注变量到底附着在哪个作用域上、并且总是移动代码块、将代码块包装在其他块的内部，那么它会让你感到疑惑。
+
+明确地为块作用域创建代码块可以处理这些问题，使得变量附着在哪里这件事变得明显。通常，显式的代码总是比隐式或者细微的代码要更好。这种显式创建块作用域的风格很容易实现，并且和其他语言中的块作用域工作的方式类似。
+
+	var foo = true;
+
+	if (foo) {
+	    { // <-- explicit block
+	        let bar = foo * 2;
+	        bar = something( bar );
+	        console.log( bar );
+	    }
+	}
+
+	console.log( bar ); // ReferenceError
+	
+我们可以通过简单地在任何一个有效语法的位置引入一个`{ .. }`对来为`let`强制创建一个用来绑定的块。在上面的例子中，我们已经在if语句中显式地创建了一个块，在之后的重构中，我们可以简单地移动这个块而不会影响到外部if语句的位置和语义。
+
+**注：**另一个显式创建块级作用域的例子，请见附录B
+
+在第四章中，我们会谈到变量提升，它描述的是变量声明被提升到它发生的整个作用域中。
+
+但是，通过`let`声明的变量不会被提升到它们所在的整个块级作用域中。这种声明直到声明语句在代码块“存在”的那一刻才真正发生。
+
+	{
+	   console.log( bar ); // ReferenceError!
+	   let bar = 2;
+	}
+	
+## 垃圾回收
+
+另一个块级作用域是有用的的另一个原因和闭包以及垃圾回收有关。我们在这里做简要说明，但是闭包的机制直到第5章才会解释。
+
+考虑下面的代码：
+
+	function process(data) {
+	    // do something interesting
+	}
+
+	var someReallyBigData = { .. };
+
+	process( someReallyBigData );
+
+	var btn = document.getElementById( "my_button" );
+
+	btn.addEventListener( "click", function click(evt){
+	    console.log("button clicked");
+	}, /*capturingPhase=*/false );
+	
+这里，`click`函数的回调函数并不需要`someReallyBigData`。这意味着，从理论上说，在`process(..)`运行之后，这段非常占用内存的数据结构可以被回收掉。但是很有可能（取决于实现方式）JS引擎仍然将保存这段内容，因为`click`函数拥有一个在整个作用域之上的闭包。
+
+块级作用域可以处理这种问题，能够通知引擎它不需要一直持有`someReallyBigData`：
+
+	function process(data) {
+	    // do something interesting
+	}
+
+	// anything declared inside this block can go away after!
+	{
+	    let someReallyBigData = { .. };
+
+	    process( someReallyBigData );
+	}
+
+	var btn = document.getElementById( "my_button" );
+
+	btn.addEventListener( "click", function click(evt){
+	    console.log("button clicked");
+	}, /*capturingPhase=*/false );
+	
+为变量显示地声明可以被绑定的代码块是一种有效的手段，你可以经常使用它。
+
+## `let`循环
+
+我们之前讨论的例子中有一个特殊的使用`let`的例子。
+
+	for (let i=0; i<10; i++) {
+	    console.log( i );
+	}
+
+	console.log( i ); // ReferenceError
+
+for循环头中的`let`不仅仅将`i`绑定到for循环体内，事实上，它将`i`**重新绑定**到每个循环迭代中，确保在上次循环迭代结束后重新给它赋值。
+
+这里是另一个说明这种行为的例子：
+
+	{
+	    let j;
+	    for (j=0; j<10; j++) {
+	        let i = j; // re-bound for each iteration!
+	        console.log( i );
+	    }
+	}
+
+我们会在第5章讨论闭包时阐明这种有趣行为的原因。
+
+因为`let`声明的变量可以附着到任意块中，而不需要到整个函数作用域（或全局作用域），但是如果已有的代码存在对函数作用域的`var`声明的隐式依赖，那么这里就会有陷阱，当你在尝试用`let`代替`var`时需要小心处理。
+
+考虑下面的代码：
+
+	var foo = true, baz = 10;
+
+	if (foo) {
+	    var bar = 3;
+
+	    if (baz > bar) {
+	        console.log( baz );
+	    }
+
+	    // ...
+	}
+	
+这段代码可以很容易的被重构成：
+
+	var foo = true, baz = 10;
+
+	if (foo) {
+	    var bar = 3;
+
+	    // ...
+	}
+
+	if (baz > bar) {
+	    console.log( baz );
+	}
+	
+但是，当你在使用块级作用域时就要小心了：
+
+	var foo = true, baz = 10;
+
+	if (foo) {
+	    let bar = 3;
+
+	    if (baz > bar) { // <-- don't forget `bar` when moving!
+	        console.log( baz );
+	    }
+	}
+
+你可以在附录B中找到另一种（更加显式）的块级作用域风格，它可以使得维护/重构代码更简单。
+
+## `const`
+
+除了`let`以外，ES6还引入了`const`，它同样创建一个块级作用域，但是这些值是不可变的（常量）。任何尝试对它进行修改的操作会导致一个错误。
+
+	var foo = true;
+
+	if (foo) {
+	    var a = 2;
+	    const b = 3; // block-scoped to the containing `if`
+
+	    a = 3; // just fine!
+	    b = 4; // error!
+	}
+
+	console.log( a ); // 3
+	console.log( b ); // ReferenceError!
+	
+# 章节回顾（给太长不看的人看的）
+
+函数是JavaScript中最常见的作用域。在一个函数内部所声明的变量和函数实际上对外部的作用域来说是“隐藏”的，这是好的软件设计准则。
+
+但是函数不是唯一的作用域单元。块级作用域指的是变量和函数可以属于任何一个代码块（一般来说，是`{ .. }`括号对），而不仅仅属于外部函数。
+
+从ES3开始，`try/catch`结构在`catch`分支中有了块级作用域。
+
+在ES6中，`let`关键词（一个`var`关键词的表亲）被引入来允许在任何代码块中声明变量。代码`if(..) { let a = 3; }`会声明一个`a`变量来实际上劫持`if`的 `{ .. }`块级作用域，并将自身附着在上面。
+
+尽管有人这样认为，块级作用域不应被视为`var`函数作用域的完全替代品。这两种特性都应该存在，开发者应该基于如何创建更好、更容易阅读/维护的代码的角度来选择性的使用这两种技术。
