@@ -130,3 +130,36 @@
 
 ## 现在我能看见了
 
+前面的代码有一些学术化了，它们是特地写来让你理解闭包的。但是我向你保证，闭包不仅仅只是一个新的玩具。闭包是在你的代码中无处不在的。让我们看看事实真相。
+
+	function wait(message) {
+
+	    setTimeout( function timer(){
+	        console.log( message );
+	    }, 1000 );
+
+	}
+
+	wait( "Hello, closure!" );
+	
+我们使用了一个内部函数（名为`timer`）并将其传递给了`setTimeout(..)`。但是`timer`在`wait(..)`的作用域之上有一个作用域闭包，它不停的保持并使用对变量`message`的引用。
+
+在我们执行`wait(..)`的一千毫秒之后，它的内部作用域不会消失，因为匿名函数仍然在该作用域上持有一个闭包。
+
+我们深入到引擎的内部看看，内置的功能类`setTimeout(..)`有对一些参数的引用，可能叫做`fn`也可能叫做`func`。引擎会调用这个函数，然后它实际上是调用我们内部的`timer`函数，并且词法作用域的引用依然是完好无损的。
+
+**闭包。**
+
+或者，如果你信仰jQuery（或者任何JS框架，无所谓）
+
+	function setupBot(name,selector) {
+	    $( selector ).click( function activator(){
+	        console.log( "Activating: " + name );
+	    } );
+	}
+
+	setupBot( "Closure Bot 1", "#bot_1" );
+	setupBot( "Closure Bot 2", "#bot_2" );
+	
+我不知道你会写那种代码，但是我通常会编写那种负责管理整个全局机器人军队的闭包机器人，这是完全可行的！
+
