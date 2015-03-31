@@ -262,3 +262,281 @@
 
 问题解决！
 
+## 重新审视块作用域
+
+认真看一下我们前面这个解决方案的分析过程。我们使用了一个IIFE来为每一次迭代创建一个新的作用域。换句话说，我们实际上需要一个每个迭代周期的**块作用域**。第三章我们演示了`let`声明，它劫持了一个块，并在块中声明了一个变量。
+
+**其本质是将一个块转化为一个作用域以便我们可以覆盖。**因此，下面这段神奇的代码是“可以工作的”:
+
+	for (var i=1; i<=5; i++) {
+	    let j = i; // yay, block-scope for closure!
+	    setTimeout( function timer(){
+	        console.log( j );
+	    }, j*1000 );
+	}
+
+但是，不仅仅是这样！（用我最Bob Barker的声音说）。对于`let`声明处在for循环头的场景有一个特殊的定义。该行为表示变量声明不仅仅会为循环声明一次，并且会在**每次循环迭代中都声明一次。**因此，它会像我们期望那样在每个自迭代中都用新值初始化一次。
+
+	for (let i=1; i<=5; i++) {
+	    setTimeout( function timer(){
+	        console.log( i );
+	    }, i*1000 );
+	}
+
+很酷不是吗？将块作用域和闭包相结合，我们能解决所有的问题。我不知道你怎么想，但是这让我变成了一个快乐的JavaScript程序员。
+
+## 模块
+
+有一些其它的代码模式可以发挥闭包的作用，而表面上并没有用到回调。让我们看看其中一个很强大的例子：模块。
+
+	function foo() {
+	    var something = "cool";
+	    var another = [1, 2, 3];
+	
+	    function doSomething() {
+	        console.log( something );
+	    }
+	
+	    function doAnother() {
+	        console.log( another.join( " ! " ) );
+	    }
+	}
+
+在这个例子中，我们没有发现可见的闭包。我们只有一些私有数据变量`something`和`another`，以及一些内部函数`doSomething()`和`doAnother()`，它们都在`foo()`的作用域内有词法作用域（以及闭包）。
+
+但是下面让我们看看这样：
+
+	function CoolModule() {
+	    var something = "cool";
+	    var another = [1, 2, 3];
+	
+	    function doSomething() {
+	        console.log( something );
+	    }
+	
+	    function doAnother() {
+	        console.log( another.join( " ! " ) );
+	    }
+	
+	    return {
+	        doSomething: doSomething,
+	        doAnother: doAnother
+	    };
+	}
+	
+	var foo = CoolModule();
+	
+	foo.doSomething(); // cool
+	foo.doAnother(); // 1 ! 2 ! 3
+
+JavaScript中这种模式我们成为模块。最普遍的实现这种模块模式往往被称为“Revealing Module”，也就是我们在这里呈现的这种变种。
+
+让我们来查看一下这段代码。
+
+首先，`CoolModule()`只是一个函数，但是它需要被调用以便产生一个模块实例。如果没有外部函数的执行，内部的作用域和闭包就不会被创建。
+
+然后，`CoolModule()`函数返回了一个对象，由文本对象语法`{ key: value, ...}`来定义。我们返回的对象有一个对我们内部函数的引用，但是没有对内部数变量的引用。我们将其视为隐藏私有。将这个返回对象视为**我们模块的公有API**是非常恰当的。
+
+这个对象最终被赋值给外部变量`foo`，然后我们可以访问这些API上的属性方法，就像`foo.doSomething()`一样。
+
+**注：**从模块中返回一个实际对象并不是所必须的。我们可以仅仅直接返回一个内部函数。jQuery实际上就是一个好的例子。`jQuery`和`$`标识符是jQuery模块的公有API，但是它们自身实际上只是函数（它们自身可以有属性，因为所有的函数实际上都是对象）。
+
+`doSomething()`和`doAnother`函数拥有在模块“实例”（通过调用`CoolModule()`得到）的内部作用域之上的闭包。当我们将这些函数通过返回对象的属性的方式传递到词法作用域之外时，我们并不知道哪一个闭包会被使用：
+
+1. 一定有一个外部包装函数，它会被至少调用一次（每次创建一个新的模块实例）
+
+2. 包装函数需要至少返回一个内部函数，因此这个内部函数就拥有了私有作用域之上的闭包，并且可以访问或修改私有状态。
+
+一个仅仅包含函数属性的对象并不是一个模块，一个从函数中返回的仅仅带有数据属性而没有闭包函数的对象也不是一个模块。
+
+上面的代码显示了一个单独的名为`CoolModule()`的模块构造器，它可以被调用任意多次，每次都会创造一个新的模块实例。一个小变种是当你只想要一个实例，也就是所谓的“单例模式”：
+
+	var foo = (function CoolModule() {
+	    var something = "cool";
+	    var another = [1, 2, 3];
+	
+	    function doSomething() {
+	        console.log( something );
+	    }
+	
+	    function doAnother() {
+	        console.log( another.join( " ! " ) );
+	    }
+	
+	    return {
+	        doSomething: doSomething,
+	        doAnother: doAnother
+	    };
+	})();
+	
+	foo.doSomething(); // cool
+	foo.doAnother(); // 1 ! 2 ! 3
+
+这里，我们将函数变为一个IIFE（见第三章），然后我们立即调用它并将其返回值赋值给实例标识符`foo`。
+
+模块都只是函数，因此它们可以接收参数：
+
+	function CoolModule(id) {
+	    function identify() {
+	        console.log( id );
+	    }
+	
+	    return {
+	        identify: identify
+	    };
+	}
+	
+	var foo1 = CoolModule( "foo 1" );
+	var foo2 = CoolModule( "foo 2" );
+	
+	foo1.identify(); // "foo 1"
+	foo2.identify(); // "foo 2"
+
+另一个细微但强大的模块模式的变种是将你所要返回的对象命名为你的公共API：
+
+	var foo = (function CoolModule(id) {
+	    function change() {
+	        // modifying the public API
+	        publicAPI.identify = identify2;
+	    }
+	
+	    function identify1() {
+	        console.log( id );
+	    }
+	
+	    function identify2() {
+	        console.log( id.toUpperCase() );
+	    }
+	
+	    var publicAPI = {
+	        change: change,
+	        identify: identify1
+	    };
+	
+	    return publicAPI;
+	})( "foo module" );
+	
+	foo.identify(); // foo module
+	foo.change();
+	foo.identify(); // FOO MODULE
+
+通过保存对模块实例内部公有API对象的引用，你可以通过添加/y移除方法、属性或更改属性值的方式从内部修改该模块实例。
+
+## 现代模块
+
+各种各样的模块加载器/管理器实质上都是包装了这一模式使其拥有更友好的API。不专注于某个特定的库，让我来给你演示一个非常简单的内容来证明（**只是证明**）。
+
+	var MyModules = (function Manager() {
+	    var modules = {};
+	
+	    function define(name, deps, impl) {
+	        for (var i=0; i<deps.length; i++) {
+	            deps[i] = modules[deps[i]];
+	        }
+	        modules[name] = impl.apply( impl, deps );
+	    }
+	
+	    function get(name) {
+	        return modules[name];
+	    }
+	
+	    return {
+	        define: define,
+	        get: get
+	    };
+	})();
+
+这段代码的核心部分是`modules[name] = impl.apply(impl, deps)`。它是在调用模块的包装定义函数（通过传递依赖的方式），并将返回值，即模块的API，存储到一个由名称跟踪的模块内部的列表上。
+
+然后下面是我可能会如何使用它来定义一些模块：
+
+	MyModules.define( "bar", [], function(){
+	    function hello(who) {
+	        return "Let me introduce: " + who;
+	    }
+	
+	    return {
+	        hello: hello
+	    };
+	} );
+	
+	MyModules.define( "foo", ["bar"], function(bar){
+	    var hungry = "hippo";
+	
+	    function awesome() {
+	        console.log( bar.hello( hungry ).toUpperCase() );
+	    }
+	
+	    return {
+	        awesome: awesome
+	    };
+	} );
+	
+	var bar = MyModules.get( "bar" );
+	var foo = MyModules.get( "foo" );
+	
+	console.log(
+	    bar.hello( "hippo" )
+	); // Let me introduce: hippo
+	
+	foo.awesome(); // LET ME INTRODUCE: HIPPO
+
+"foo"和"bar"模块都由一个返回公共API的函数来定义。"foo"甚至接受一个"bar"的实例作为依赖参数，并且可以使用它。
+
+你应该多花点时间查看上面的代码片段以便你可以完全了解闭包的强大之处，并按你所需的来使用它们。你要记住的重点是并模块管理器并没有任何特别的“魔法”。它们同时满足满足我上面列出的模块模式的特征：调用一个函数定义包装器，持有它的返回值作为模块的API。
+
+换句话说，模块就只是模块，即使你将一个友好的包装工具放在它们之上。
+
+## 未来模块
+
+ES6位模块的概念加入了第一类的语法支持。当通过模块系统加载时，ES6将一个文件视为一个单独的模块。每一个模块可以导入其他的模块或者一个具体的API成员，也可以暴露自己的公有API成员。
+
+**注：**基于函数的模块并不是静态可识别的模式（即编译器可认知的模式），因此它们的API语义知道运行时才会被认识。因此，你可以实际上在运行时修改一个模块的API（见稍早时候对`publicAPI`的讨论）。
+
+相比之下，ES6模块的API是静态的（API并不在运行时改变）。因为编译器知道这一点，它可以（并且的确这样做了！）在编译（读取文件）时期进行检验，查看对于导入的模块的引用是否实际存在。如果API引用不存在，编译器会在编译器就抛出一个早期的错误，而不是等到传统的动态运行时才确定。
+
+ES6模块**没有**“内联”格式，它们必须在单独的文件中定义（每个模块需要一个文件）。浏览器/引擎有一个默认的“模块加载器”（这是可重写的，但是这和我们这里的讨论没有太大关系了），当它被载入时，它会同步地一个个加载模块文件。
+
+考虑下面的代码：
+
+**bar.js**
+
+	function hello(who) {
+	    return "Let me introduce: " + who;
+	}
+	
+	export hello;
+
+**foo.js**
+
+```js
+// import only `hello()` from the "bar" module
+import hello from "bar";
+
+var hungry = "hippo";
+
+function awesome() {
+    console.log(
+        hello( hungry ).toUpperCase()
+    );
+}
+
+export awesome;
+```
+
+
+```js
+// import the entire "foo" and "bar" modules
+module foo from "foo";
+module bar from "bar";
+
+console.log(
+    bar.hello( "rhino" )
+); // Let me introduce: rhino
+
+foo.awesome(); // LET ME INTRODUCE: HIPPO
+```
+
+**注：**你必须创建两个单独的文件**"foo.js"**和**"bar.js"**，它们的内容分别如上所示。然后你的程序就可以读取/导入这些模块来使用它们了，就像第三块代码那样。
+
+`import`可以将模块的一个或多个API导入到当前作用域中，
